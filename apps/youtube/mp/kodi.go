@@ -20,8 +20,19 @@ type Kodi struct {
 
 var kodiLogger = log.New("kodi", "log Kodi wrapper output")
 
-func (kodi *Kodi) initialize() {
+func (kodi *Kodi) initialize() chan State {
+	if kodi.running {
+		panic("already initialized")
+	}
+
+	kodi.mainloopExit = make(chan struct{})
 	kodi.running = true
+
+	eventChan := make(chan State)
+
+	go kodi.eventHandler(eventChan)
+
+	return eventChan
 }
 
 // Function quit quits the player.
@@ -33,6 +44,9 @@ func (kodi *Kodi) quit() {
 	}
 	kodi.running = false
 	kodi.runningMutex.Unlock()
+
+	// Wait until the mainloop has exited.
+	<-kodi.mainloopExit
 }
 
 // sendCommand sends a command to the Kodi player
@@ -114,4 +128,21 @@ func (kodi *Kodi) stop() {
 		kodiLogger.Fatal(err)
 	}
 	kodiLogger.Println(resp)
+}
+
+// playerEventHandler waits for websocket events and sends them on a channel
+func (kodi *Kodi) eventHandler(eventChan chan State) {
+	for {
+
+		kodi.runningMutex.Lock()
+		running := kodi.running
+		kodi.runningMutex.Unlock()
+
+		if !running {
+			close(eventChan)
+			kodi.mainloopExit <- struct{}{}
+			return
+		}
+
+	}
 }

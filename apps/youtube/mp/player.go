@@ -12,18 +12,17 @@ type MediaPlayer struct {
 	// A channel to coordinate access to the PlayState.
 	// The pointer to the PlayState is used as an access token.
 	playstateChan chan PlayState
-
-	vg *VideoGrabber
 }
 
 func New(stateChange chan StateChange) *MediaPlayer {
 	p := MediaPlayer{}
 	p.stateChange = stateChange
 	p.playstateChan = make(chan PlayState)
-	p.vg = NewVideoGrabber()
 
 	p.player = &Kodi{}
-	p.player.initialize()
+	playerEventChan := p.player.initialize()
+
+	go p.run(playerEventChan, 100)
 
 	return &p
 }
@@ -34,7 +33,6 @@ func New(stateChange chan StateChange) *MediaPlayer {
 func (p *MediaPlayer) Quit() {
 	p.getPlayState(func(ps *PlayState) {
 		p.player.quit()
-		p.vg.Quit()
 	})
 }
 
@@ -126,8 +124,6 @@ func (p *MediaPlayer) startPlaying(ps *PlayState, position time.Duration) {
 		// rule here.
 		ps = nil
 
-		streamUrl := p.vg.GetStream(videoId)
-
 		// again acquire PlayState access
 		p.getPlayState(func(ps *PlayState) {
 			// Check whether another video has been queued to be played already:
@@ -138,23 +134,13 @@ func (p *MediaPlayer) startPlaying(ps *PlayState, position time.Duration) {
 				return
 			}
 
-			if streamUrl == "" {
-				// Failed to get a stream.
-				// Try to play the next.
-				logger.Warnln("empty stream URL (error?)")
-				p.nextVideo(ps)
-				return
-			}
-
 			volume := -1
 			if ps.newVolume {
 				ps.newVolume = false
 				volume = ps.Volume
 			}
 
-			p.player.play(streamUrl, position, volume)
-
-			go p.prefetchVideoStream(ps.NextVideo())
+			p.player.play(videoId, position, volume)
 		})
 	}()
 }
@@ -176,29 +162,6 @@ func (p *MediaPlayer) nextVideo(ps *PlayState) {
 		// TODO keep the position at the end, not the beginning
 		p.setPlayState(ps, STATE_STOPPED, 0)
 	}
-}
-
-// Prefetch the next video after the current video has played for a
-// short while.
-//
-// Warning: start this function in a new goroutine!
-func (p *MediaPlayer) prefetchVideoStream(videoId string) {
-	if videoId == "" {
-		return
-	}
-
-	time.Sleep(10 * time.Second)
-
-	p.getPlayState(func(ps *PlayState) {
-		next := ps.NextVideo()
-
-		if next == "" || next != videoId {
-			// The playlist has changed in the meantime
-			return
-		}
-
-		go p.vg.GetStream(next)
-	})
 }
 
 // setPlayState updates the PlayState and sends events.
@@ -232,8 +195,6 @@ func (p *MediaPlayer) UpdatePlaylist(playlist []string, listId string) {
 }
 
 func (p *MediaPlayer) updatePlaylist(ps *PlayState, playlist []string) {
-	nextVideo := ps.NextVideo()
-
 	if len(ps.Playlist) == 0 {
 
 		if ps.State == STATE_PLAYING {
@@ -254,10 +215,6 @@ func (p *MediaPlayer) updatePlaylist(ps *PlayState, playlist []string) {
 		if ps.Video() != videoId && ps.State != STATE_STOPPED {
 			p.player.stop()
 		}
-	}
-
-	if ps.NextVideo() != nextVideo {
-		go p.prefetchVideoStream(ps.NextVideo())
 	}
 }
 

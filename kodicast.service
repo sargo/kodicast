@@ -1,0 +1,11 @@
+[Unit]
+Description=Kodicast service
+After=network.target sound.target
+
+[Service]
+ExecStart=/usr/local/bin/kodicast -config /var/local/kodicast/kodicast.conf -cachedir /var/local/kodicast/cache
+User=kodicast
+Group=audio
+
+[Install]
+WantedBy=multi-user.target

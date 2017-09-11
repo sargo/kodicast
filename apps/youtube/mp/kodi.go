@@ -2,14 +2,10 @@ package mp
 
 import (
 	"errors"
-	"flag"
-	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/sargo/kodicast/config"
 	"github.com/sargo/kodicast/log"
 )
 
@@ -45,19 +41,35 @@ func (kodi *Kodi) sendCommand(command string, value string) (string, error) {
 }
 
 func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
-	reply, err := kodi.sendCommand("play", stream)
+	resp, err := kodi.sendCommand("play", stream)
+	if err != nil {
+		kodiLogger.Fatal(err)
+	}
+	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) pause() {
-	reply, err := kodi.sendCommand("pause", "yes")
+	resp, err := kodi.sendCommand("pause", "yes")
+	if err != nil {
+		kodiLogger.Fatal(err)
+	}
+	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) resume() {
-	reply, err := kodi.sendCommand("pause", "no")
+	resp, err := kodi.sendCommand("pause", "no")
+	if err != nil {
+		kodiLogger.Fatal(err)
+	}
+	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) getPosition() (time.Duration, error) {
-	position, err := kodi.sendCommand("get-position", "")
+	resp, err := kodi.sendCommand("get-position", "")
+	if err != nil {
+		kodiLogger.Fatal(err)
+	}
+	position, err := strconv.ParseFloat(resp, 64)
 
 	if position < 0 {
 		// Sometimes, the position appears to be slightly off.
@@ -68,23 +80,38 @@ func (kodi *Kodi) getPosition() (time.Duration, error) {
 }
 
 func (kodi *Kodi) setPosition(position time.Duration) {
-	reply, err := kodi.sendCommand("set-position", position)
+	resp, err := kodi.sendCommand("set-position", position.String())
+	if err != nil {
+		kodiLogger.Fatal(err)
+	}
+	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) getVolume() int {
-	volume, err := kodi.sendCommand("get-volume")
+	resp, err := kodi.sendCommand("get-volume", "")
 	if err != nil {
-		// should not happen
-		panic(err)
+		kodiLogger.Fatal(err)
+	}
+	volume, err := strconv.ParseFloat(resp, 64)
+	if err != nil {
+		kodiLogger.Fatal(err)
 	}
 
 	return int(volume + 0.5)
 }
 
 func (kodi *Kodi) setVolume(volume int) {
-	reply, err := kodi.sendCommand("set-volume", volume)
+	resp, err := kodi.sendCommand("set-volume", strconv.Itoa(volume))
+	if err != nil {
+		kodiLogger.Fatal(err)
+	}
+	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) stop() {
-	kodi.sendCommand("stop", "")
+	resp, err := kodi.sendCommand("stop", "")
+	if err != nil {
+		kodiLogger.Fatal(err)
+	}
+	kodiLogger.Println(resp)
 }

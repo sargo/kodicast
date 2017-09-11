@@ -5,7 +5,7 @@ import (
 )
 
 type Backend interface {
-	initialize() (chan State, int)
+	initialize()
 	quit()
 	play(string, time.Duration, int)
 	pause()

@@ -7,15 +7,16 @@ import (
 	"time"
 
 	"github.com/sargo/kodicast/log"
+	"github.com/pdf/kodirpc"
 )
 
 var KODI_PROPERTY_UNAVAILABLE = errors.New("kodi: property unavailable")
 
 // Kodi is an implementation of Backend.
 type Kodi struct {
+	client       kodirpc.Client
 	running      bool
 	runningMutex sync.Mutex
-	mainloopExit chan struct{}
 }
 
 var kodiLogger = log.New("kodi", "log Kodi wrapper output")
@@ -25,12 +26,23 @@ func (kodi *Kodi) initialize() chan State {
 		panic("already initialized")
 	}
 
-	kodi.mainloopExit = make(chan struct{})
-	kodi.running = true
+	kodi.client, err := kodirpc.NewClient("127.0.0.1:8080", kodirpc.NewConfig())
+	if err != nil {
+		panic(err)
+	}
 
 	eventChan := make(chan State)
+	kodi.client.Handle("Player.OnPause", func(method string, data interface{}) {
+		eventChan <- STATE_PAUSED
+	})
+	kodi.client.Handle("Player.OnPlay", func(method string, data interface{}) {
+		eventChan <- STATE_PLAYING
+	})
+	kodi.client.Handle("Player.OnStop", func(method string, data interface{}) {
+		eventChan <- STATE_STOPPED
+	})
 
-	go kodi.eventHandler(eventChan)
+	kodi.running = true
 
 	return eventChan
 }
@@ -44,105 +56,96 @@ func (kodi *Kodi) quit() {
 	}
 	kodi.running = false
 	kodi.runningMutex.Unlock()
-
-	// Wait until the mainloop has exited.
-	<-kodi.mainloopExit
 }
 
 // sendCommand sends a command to the Kodi player
-func (kodi *Kodi) sendCommand(command string, value string) (string, error) {
-	return "", nil
-}
-
-func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
-	resp, err := kodi.sendCommand("play", stream)
+func (kodi *Kodi) sendCommand(command string, params map[string]interface{}) (string) {
+	resp, err := client.Call(command, params)
 	if err != nil {
 		kodiLogger.Fatal(err)
 	}
+	return resp
+}
+
+func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
+	params := map[string]interface{}{
+		"item": map[string]interface{}{
+			"file": "plugin://plugin.video.youtube/?action=play_video&videoid="+stream
+		}
+	}
+	resp := kodi.sendCommand("Player.Open", params)
 	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) pause() {
-	resp, err := kodi.sendCommand("pause", "yes")
-	if err != nil {
-		kodiLogger.Fatal(err)
+	params := map[string]interface{}{
+		"playerid": 1
 	}
+	resp := kodi.sendCommand("Player.PlayPause", params)
 	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) resume() {
-	resp, err := kodi.sendCommand("pause", "no")
-	if err != nil {
-		kodiLogger.Fatal(err)
+	params := map[string]interface{}{
+		"playerid": 1
 	}
+	resp := kodi.sendCommand("Player.PlayPause", params)
 	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) getPosition() (time.Duration, error) {
-	resp, err := kodi.sendCommand("get-position", "")
-	if err != nil {
-		kodiLogger.Fatal(err)
+	params := map[string]interface{}{
+		"playerid": 1
+		"properties": [1]string{"time"}
 	}
-	position, err := strconv.ParseFloat(resp, 64)
+	resp := kodi.sendCommand("Player.GetProperties", "")
 
-	if position < 0 {
-		// Sometimes, the position appears to be slightly off.
-		position = 0
-	}
+	hours := ParseInt64(resp["result"]["time"]["hours"])
+	minutes := ParseInt64(resp["result"]["time"]["minutes"])
+	seconds := ParseInt64(resp["result"]["time"]["seconds"])
 
-	return time.Duration(position * float64(time.Second)), nil
+	hour := int64(time.Hour)
+	minute := int64(time.Minute)
+	second := int64(time.Second)
+	position := time.Duration(hours*hour + minutes*minute + seconds*second)
+
+	return position, nil
 }
 
 func (kodi *Kodi) setPosition(position time.Duration) {
-	resp, err := kodi.sendCommand("set-position", position.String())
-	if err != nil {
-		kodiLogger.Fatal(err)
+	params := map[string]interface{}{
+		"playerid": 1
+		"value": map[string]interface{}{
+			"hours": position.Hours()
+			"milliseconds": position.Milliseconds()
+			"minutes": position.Minutes()
+			"seconds": position.Seconds()
+		}
 	}
+	resp := kodi.sendCommand("Player.Seek", position.String())
 	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) getVolume() int {
-	resp, err := kodi.sendCommand("get-volume", "")
-	if err != nil {
-		kodiLogger.Fatal(err)
+	params := map[string]interface{}{
+		"properties": [1]string{"volume"}
 	}
-	volume, err := strconv.ParseFloat(resp, 64)
-	if err != nil {
-		kodiLogger.Fatal(err)
-	}
-
-	return int(volume + 0.5)
+	resp := kodi.sendCommand("Application.GetProperties", params)
+	return int(resp["result"]["volume"])
 }
 
 func (kodi *Kodi) setVolume(volume int) {
-	resp, err := kodi.sendCommand("set-volume", strconv.Itoa(volume))
-	if err != nil {
-		kodiLogger.Fatal(err)
+	params := map[string]interface{}{
+		"volume": volume
 	}
+	resp := kodi.sendCommand("Application.SetVolume", params)
 	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) stop() {
-	resp, err := kodi.sendCommand("stop", "")
-	if err != nil {
-		kodiLogger.Fatal(err)
+	params := map[string]interface{}{
+		"playerid": 1
 	}
+	resp := kodi.sendCommand("Player.Stop", params)
 	kodiLogger.Println(resp)
-}
-
-// playerEventHandler waits for websocket events and sends them on a channel
-func (kodi *Kodi) eventHandler(eventChan chan State) {
-	for {
-
-		kodi.runningMutex.Lock()
-		running := kodi.running
-		kodi.runningMutex.Unlock()
-
-		if !running {
-			close(eventChan)
-			kodi.mainloopExit <- struct{}{}
-			return
-		}
-
-	}
 }

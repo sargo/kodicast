@@ -1,12 +1,14 @@
 package mp
 
 import (
+	"os"
 	"errors"
 	"sync"
 	"time"
 
 	"github.com/sargo/kodicast/log"
 	"github.com/pdf/kodirpc"
+	"github.com/Sirupsen/logrus"
 )
 
 var KODI_PROPERTY_UNAVAILABLE = errors.New("kodi: property unavailable")
@@ -24,11 +26,22 @@ func (kodi *Kodi) initialize() chan State {
 	if kodi.running {
 		panic("already initialized")
 	}
+	kodiLogger.Println("connecting")
+	logger := &logrus.Logger{
+		Out:       os.Stdout,
+		Formatter: &logrus.TextFormatter{},
+		Hooks:     make(logrus.LevelHooks),
+		Level:     logrus.DebugLevel,
+	}
+	kodirpc.SetLogger(logger)
 
-	client, err := kodirpc.NewClient("127.0.0.1:8080", kodirpc.NewConfig())
+	config := kodirpc.NewConfig()
+	config.ReadTimeout = 20 * time.Second
+	client, err := kodirpc.NewClient("127.0.0.1:9090", config)
 	if err != nil {
 		panic(err)
 	}
+	kodiLogger.Println("connected")
 	kodi.client = client
 
 	eventChan := make(chan State)
@@ -43,6 +56,7 @@ func (kodi *Kodi) initialize() chan State {
 	})
 
 	kodi.running = true
+	kodiLogger.Println("initialized")
 
 	return eventChan
 }
@@ -60,11 +74,14 @@ func (kodi *Kodi) quit() {
 
 // sendCommand sends a command to the Kodi player
 func (kodi *Kodi) sendCommand(command string, params map[string]interface{}) (map[string]interface{}) {
+	kodiLogger.Println(command)
+	kodiLogger.Println(params)
 	resp, err := kodi.client.Call(command, params)
 	if err != nil {
 		kodiLogger.Fatal(err)
 	}
 	result := resp.(map[string]interface{})
+	kodiLogger.Println(result)
 	return result
 }
 

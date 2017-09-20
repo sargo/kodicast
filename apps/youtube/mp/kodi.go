@@ -2,7 +2,6 @@ package mp
 
 import (
 	"errors"
-	"strconv"
 	"sync"
 	"time"
 
@@ -14,7 +13,7 @@ var KODI_PROPERTY_UNAVAILABLE = errors.New("kodi: property unavailable")
 
 // Kodi is an implementation of Backend.
 type Kodi struct {
-	client       kodirpc.Client
+	client       *kodirpc.Client
 	running      bool
 	runningMutex sync.Mutex
 }
@@ -26,10 +25,11 @@ func (kodi *Kodi) initialize() chan State {
 		panic("already initialized")
 	}
 
-	kodi.client, err := kodirpc.NewClient("127.0.0.1:8080", kodirpc.NewConfig())
+	client, err := kodirpc.NewClient("127.0.0.1:8080", kodirpc.NewConfig())
 	if err != nil {
 		panic(err)
 	}
+	kodi.client = client
 
 	eventChan := make(chan State)
 	kodi.client.Handle("Player.OnPause", func(method string, data interface{}) {
@@ -59,50 +59,52 @@ func (kodi *Kodi) quit() {
 }
 
 // sendCommand sends a command to the Kodi player
-func (kodi *Kodi) sendCommand(command string, params map[string]interface{}) (string) {
-	resp, err := client.Call(command, params)
+func (kodi *Kodi) sendCommand(command string, params map[string]interface{}) (map[string]interface{}) {
+	resp, err := kodi.client.Call(command, params)
 	if err != nil {
 		kodiLogger.Fatal(err)
 	}
-	return resp
+	result := resp.(map[string]interface{})
+	return result
 }
 
 func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
 	params := map[string]interface{}{
-		"item": map[string]interface{}{
-			"file": "plugin://plugin.video.youtube/?action=play_video&videoid="+stream
-		}
+		"item": map[string]string{
+			"file": "plugin://plugin.video.youtube/?action=play_video&videoid="+stream,
+		},
 	}
-	resp := kodi.sendCommand("Player.Open", params)
-	kodiLogger.Println(resp)
+	result := kodi.sendCommand("Player.Open", params)
+	kodiLogger.Println(result)
 }
 
 func (kodi *Kodi) pause() {
 	params := map[string]interface{}{
-		"playerid": 1
+		"playerid": 1,
 	}
-	resp := kodi.sendCommand("Player.PlayPause", params)
-	kodiLogger.Println(resp)
+	result := kodi.sendCommand("Player.PlayPause", params)
+	kodiLogger.Println(result)
 }
 
 func (kodi *Kodi) resume() {
 	params := map[string]interface{}{
-		"playerid": 1
+		"playerid": 1,
 	}
-	resp := kodi.sendCommand("Player.PlayPause", params)
-	kodiLogger.Println(resp)
+	result := kodi.sendCommand("Player.PlayPause", params)
+	kodiLogger.Println(result)
 }
 
 func (kodi *Kodi) getPosition() (time.Duration, error) {
 	params := map[string]interface{}{
-		"playerid": 1
-		"properties": [1]string{"time"}
+		"playerid": 1,
+		"properties": [1]string{"time"},
 	}
-	resp := kodi.sendCommand("Player.GetProperties", "")
+	result := kodi.sendCommand("Player.GetProperties", params)
 
-	hours := ParseInt64(resp["result"]["time"]["hours"])
-	minutes := ParseInt64(resp["result"]["time"]["minutes"])
-	seconds := ParseInt64(resp["result"]["time"]["seconds"])
+	timeData := result["time"].(map[string]int64)
+	hours := timeData["hours"]
+	minutes := timeData["minutes"]
+	seconds := timeData["seconds"]
 
 	hour := int64(time.Hour)
 	minute := int64(time.Minute)
@@ -114,38 +116,39 @@ func (kodi *Kodi) getPosition() (time.Duration, error) {
 
 func (kodi *Kodi) setPosition(position time.Duration) {
 	params := map[string]interface{}{
-		"playerid": 1
-		"value": map[string]interface{}{
-			"hours": position.Hours()
-			"milliseconds": position.Milliseconds()
-			"minutes": position.Minutes()
-			"seconds": position.Seconds()
-		}
+		"playerid": 1,
+		"value": map[string]int64{
+			"hours": int64(position.Hours()),
+			"milliseconds": 0,
+			"minutes": int64(position.Minutes()),
+			"seconds": int64(position.Seconds()),
+		},
 	}
-	resp := kodi.sendCommand("Player.Seek", position.String())
-	kodiLogger.Println(resp)
+	result := kodi.sendCommand("Player.Seek", params)
+	kodiLogger.Println(result)
 }
 
 func (kodi *Kodi) getVolume() int {
 	params := map[string]interface{}{
-		"properties": [1]string{"volume"}
+		"properties": [1]string{"volume"},
 	}
-	resp := kodi.sendCommand("Application.GetProperties", params)
-	return int(resp["result"]["volume"])
+	result := kodi.sendCommand("Application.GetProperties", params)
+	volume := result["volume"].(int)
+	return int(volume)
 }
 
 func (kodi *Kodi) setVolume(volume int) {
 	params := map[string]interface{}{
-		"volume": volume
+		"volume": volume,
 	}
-	resp := kodi.sendCommand("Application.SetVolume", params)
-	kodiLogger.Println(resp)
+	result := kodi.sendCommand("Application.SetVolume", params)
+	kodiLogger.Println(result)
 }
 
 func (kodi *Kodi) stop() {
 	params := map[string]interface{}{
-		"playerid": 1
+		"playerid": 1,
 	}
-	resp := kodi.sendCommand("Player.Stop", params)
-	kodiLogger.Println(resp)
+	result := kodi.sendCommand("Player.Stop", params)
+	kodiLogger.Println(result)
 }

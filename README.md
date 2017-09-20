@@ -4,6 +4,11 @@ This is a small [DIAL](http://www.dial-multiscreen.org) server that emulates
 Chromecast-like devices, and implements the YouTube app. It proxies YouTube
 commands from mobile app to Kodi YouTube plugin.
 
+## Kodi configuration
+
+Turn on JSON-RPC (TCP transport) by enabling "Allow remote control from applications
+on other systems" in "Settings > Service > Control" panel.
+ 
 ## Installation
 
 I'm going to assume you're running Linux for this installation guide, preferably
@@ -41,8 +46,10 @@ work.
 ## Thanks
 
 Big part of Kodicast is taken from
-[Kodicast](https://github.com/sargo/kodicast) released on BSD license by
-[Ayke van Laethem](https://sargo.nl/about).
+[Plaincast](https://github.com/aykevl/plaincast) released on BSD license by
+[Ayke van Laethem](https://aykevl.nl/about).
+It use also a great librarty [kodirpc](https://github.com/pdf/kodirpc) by
+Peter Fern.
 
 I would like to thank the creators of
 [leapcast](https://github.com/dz0ny/leapcast). Leapcast is a Chromecast

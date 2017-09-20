@@ -22,7 +22,6 @@ const (
 	STATE_PLAYING         = 1
 	STATE_PAUSED          = 2
 	STATE_BUFFERING       = 3
-	STATE_SEEKING         = 4 // not in the YouTube API
 )
 
 // PlayState defines the current state of the generic MediaPlayer.

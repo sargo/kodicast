@@ -42,21 +42,10 @@ func (p *MediaPlayer) getPosition(ps *PlayState) time.Duration {
 	switch ps.State {
 	case STATE_STOPPED:
 		position = 0
-	case STATE_BUFFERING, STATE_SEEKING:
+	case STATE_BUFFERING:
 		position = ps.bufferingPosition
 	case STATE_PLAYING, STATE_PAUSED:
-		var err error
-		position, err = p.player.getPosition()
-		if err != nil {
-			// TODO: there are still race conditions left.
-			// It is possible that getPosition is requested right before the end
-			// of a stream, for example via 'getPlaylist'. The property may then
-			// be returned after the end of the stream, resulting in a 'property
-			// unavailable' error. getPosition should be rewritten to request
-			// the property asynchronously so we can take care of the actual
-			// playstate.
-			panic(err)
-		}
+		position = p.player.getPosition()
 	default:
 		panic("unknown state")
 	}
@@ -167,14 +156,14 @@ func (p *MediaPlayer) nextVideo(ps *PlayState) {
 // setPlayState updates the PlayState and sends events.
 // position may be -1: in that case it will be updated.
 func (p *MediaPlayer) setPlayState(ps *PlayState, state State, position time.Duration) {
-	if ps.State == STATE_BUFFERING || ps.State == STATE_SEEKING {
+	if ps.State == STATE_BUFFERING {
 		position = ps.bufferingPosition
 	}
 
 	ps.previousState = ps.State
 	ps.State = state
 
-	if state == STATE_BUFFERING || state == STATE_SEEKING {
+	if state == STATE_BUFFERING {
 		ps.bufferingPosition = position
 	} else {
 		ps.bufferingPosition = -1
@@ -277,9 +266,7 @@ func (p *MediaPlayer) RequestPlaylist(playlistChan chan PlaylistState) {
 // Pause pauses the currently playing video
 func (p *MediaPlayer) Pause() {
 	p.getPlayState(func(ps *PlayState) {
-		if ps.State == STATE_SEEKING {
-			ps.nextState = STATE_PAUSED
-		} else if ps.State != STATE_PLAYING {
+		if ps.State != STATE_PLAYING {
 			// This is a Printf and not a Warnf because this occurs often in
 			// practice when seeking and is harmless in that case.
 			logger.Printf("pause while in state %d - ignoring\n", ps.State)
@@ -300,9 +287,6 @@ func (p *MediaPlayer) Play() {
 			}
 			p.startPlaying(ps, 0)
 
-		} else if ps.State == STATE_SEEKING {
-			ps.nextState = STATE_PLAYING
-
 		} else {
 			if ps.State != STATE_PAUSED {
 				logger.Warnf("resume while in state %d - ignoring\n", ps.State)
@@ -319,7 +303,6 @@ func (p *MediaPlayer) Seek(position time.Duration) {
 		if ps.State == STATE_STOPPED {
 			p.startPlaying(ps, position)
 		} else if ps.State == STATE_PAUSED || ps.State == STATE_PLAYING {
-			p.setPlayState(ps, STATE_SEEKING, position)
 			p.player.setPosition(position)
 		} else {
 			logger.Warnf("state is not paused or playing while seeking (state: %d) - ignoring\n", ps.State)
@@ -416,27 +399,6 @@ func (p *MediaPlayer) run(playerEventChan chan State, initialVolume int) {
 				if ps.newVolume {
 					ps.newVolume = false
 					p.player.setVolume(ps.Volume)
-				}
-
-				if ps.State == STATE_SEEKING {
-					if ps.nextState != -1 && ps.previousState != ps.nextState {
-						ps.State = ps.previousState
-
-						state := ps.nextState
-						ps.nextState = -1
-
-						switch state {
-						case STATE_PLAYING:
-							p.player.resume()
-						case STATE_PAUSED:
-							p.player.pause()
-						default:
-							panic("unknown nextState")
-						}
-					} else {
-						p.setPlayState(&ps, ps.previousState, -1)
-					}
-					break
 				}
 
 				p.setPlayState(&ps, STATE_PLAYING, -1)

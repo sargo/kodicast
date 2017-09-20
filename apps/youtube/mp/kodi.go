@@ -46,12 +46,15 @@ func (kodi *Kodi) initialize() chan State {
 
 	eventChan := make(chan State)
 	kodi.client.Handle("Player.OnPause", func(method string, data interface{}) {
+		kodiLogger.Println("OnPause")
 		eventChan <- STATE_PAUSED
 	})
 	kodi.client.Handle("Player.OnPlay", func(method string, data interface{}) {
+		kodiLogger.Println("OnPlay")
 		eventChan <- STATE_PLAYING
 	})
 	kodi.client.Handle("Player.OnStop", func(method string, data interface{}) {
+		kodiLogger.Println("OnStop")
 		eventChan <- STATE_STOPPED
 	})
 
@@ -73,16 +76,15 @@ func (kodi *Kodi) quit() {
 }
 
 // sendCommand sends a command to the Kodi player
-func (kodi *Kodi) sendCommand(command string, params map[string]interface{}) (map[string]interface{}) {
+func (kodi *Kodi) sendCommand(command string, params map[string]interface{}) (interface{}, error) {
 	kodiLogger.Println(command)
 	kodiLogger.Println(params)
 	resp, err := kodi.client.Call(command, params)
 	if err != nil {
-		kodiLogger.Fatal(err)
+		kodiLogger.Println(err)
 	}
-	result := resp.(map[string]interface{})
-	kodiLogger.Println(result)
-	return result
+	kodiLogger.Println(resp)
+	return resp, err
 }
 
 func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
@@ -91,81 +93,96 @@ func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
 			"file": "plugin://plugin.video.youtube/?action=play_video&videoid="+stream,
 		},
 	}
-	result := kodi.sendCommand("Player.Open", params)
+	resp, _ := kodi.sendCommand("Player.Open", params)
+	result := resp.(string)
 	kodiLogger.Println(result)
+}
+
+func (kodi *Kodi) getPlayerId() (int) {
+	params := map[string]interface{}{
+	}
+	resp, err := kodi.sendCommand("Player.GetActivePlayers", params)
+	if err != nil {
+		return 0
+	}
+
+	result := resp.([]interface{})
+	for _, i := range result {
+		item := i.(map[string]interface{})
+		playerType := item["type"].(string)
+		if playerType == "video" {
+			return int(item["playerid"].(float64))
+		}
+	}
+
+	return -1
 }
 
 func (kodi *Kodi) pause() {
 	params := map[string]interface{}{
-		"playerid": 1,
+		"playerid": kodi.getPlayerId(),
 	}
-	result := kodi.sendCommand("Player.PlayPause", params)
+	result, _ := kodi.sendCommand("Player.PlayPause", params)
 	kodiLogger.Println(result)
 }
 
 func (kodi *Kodi) resume() {
 	params := map[string]interface{}{
-		"playerid": 1,
+		"playerid": kodi.getPlayerId(),
 	}
-	result := kodi.sendCommand("Player.PlayPause", params)
+	result, _ := kodi.sendCommand("Player.PlayPause", params)
 	kodiLogger.Println(result)
 }
 
-func (kodi *Kodi) getPosition() (time.Duration, error) {
+func (kodi *Kodi) getPosition() (time.Duration) {
 	params := map[string]interface{}{
-		"playerid": 1,
+		"playerid": kodi.getPlayerId(),
 		"properties": [1]string{"time"},
 	}
-	result := kodi.sendCommand("Player.GetProperties", params)
+	resp, err := kodi.sendCommand("Player.GetProperties", params)
+	if err != nil {
+		return 0
+	}
 
-	timeData := result["time"].(map[string]int64)
-	hours := timeData["hours"]
-	minutes := timeData["minutes"]
-	seconds := timeData["seconds"]
+	result := resp.(map[string]interface{})
+	timeData := result["time"].(map[string]interface{})
+	hours := int64(timeData["hours"].(float64))
+	minutes := int64(timeData["minutes"].(float64))
+	seconds := int64(timeData["seconds"].(float64))
 
 	hour := int64(time.Hour)
 	minute := int64(time.Minute)
 	second := int64(time.Second)
 	position := time.Duration(hours*hour + minutes*minute + seconds*second)
 
-	return position, nil
+	return position
 }
 
 func (kodi *Kodi) setPosition(position time.Duration) {
 	params := map[string]interface{}{
-		"playerid": 1,
+		"playerid": kodi.getPlayerId(),
 		"value": map[string]int64{
-			"hours": int64(position.Hours()),
-			"milliseconds": 0,
-			"minutes": int64(position.Minutes()),
-			"seconds": int64(position.Seconds()),
+			"hours": int64(position.Hours()) % 24,
+			"minutes": int64(position.Minutes()) % 60,
+			"seconds": int64(position.Seconds()) % 60,
 		},
 	}
-	result := kodi.sendCommand("Player.Seek", params)
+	result, _ := kodi.sendCommand("Player.Seek", params)
 	kodiLogger.Println(result)
-}
-
-func (kodi *Kodi) getVolume() int {
-	params := map[string]interface{}{
-		"properties": [1]string{"volume"},
-	}
-	result := kodi.sendCommand("Application.GetProperties", params)
-	volume := result["volume"].(int)
-	return int(volume)
 }
 
 func (kodi *Kodi) setVolume(volume int) {
 	params := map[string]interface{}{
 		"volume": volume,
 	}
-	result := kodi.sendCommand("Application.SetVolume", params)
+	result, _ := kodi.sendCommand("Application.SetVolume", params)
 	kodiLogger.Println(result)
 }
 
 func (kodi *Kodi) stop() {
 	params := map[string]interface{}{
-		"playerid": 1,
+		"playerid": kodi.getPlayerId(),
 	}
-	result := kodi.sendCommand("Player.Stop", params)
+	result, _ := kodi.sendCommand("Player.Stop", params)
 	kodiLogger.Println(result)
 }

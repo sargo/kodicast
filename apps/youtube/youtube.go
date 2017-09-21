@@ -269,7 +269,7 @@ func (yt *YouTube) run(arguments url.Values) {
 					logger.Warnln("setPlaylist got invalid parameters")
 					break
 				}
-
+				logger.Println("SetPlaystate:", playlist, index, position, message.args["listId"])
 				yt.mp.SetPlaystate(playlist, index, position, message.args["listId"])
 			case "updatePlaylist":
 				playlist := strings.Split(message.args["videoIds"], ",")
@@ -313,6 +313,10 @@ func (yt *YouTube) run(arguments url.Values) {
 				yt.mp.Seek(position)
 			case "stopVideo":
 				yt.mp.Stop()
+			case "next":
+				yt.mp.NextVideo()
+			case "previous":
+				yt.mp.PreviousVideo()
 			}
 
 		case <-yt.runQuit:
@@ -735,6 +739,8 @@ func (yt *YouTube) sendMessages() {
 		case message, ok := <-yt.outgoingMessages:
 			if !ok {
 				// This is the sign the sendMessages goroutine should quit.
+				yt.Quit()
+				logger.Println("quited")
 				return
 			}
 

@@ -36,7 +36,7 @@ func (kodi *Kodi) initialize() chan State {
 	kodirpc.SetLogger(logger)
 
 	config := kodirpc.NewConfig()
-	config.ReadTimeout = 20 * time.Second
+	config.ReadTimeout = 30 * time.Second
 	client, err := kodirpc.NewClient("127.0.0.1:9090", config)
 	if err != nil {
 		panic(err)
@@ -46,19 +46,32 @@ func (kodi *Kodi) initialize() chan State {
 
 	eventChan := make(chan State)
 	kodi.client.Handle("Player.OnPause", func(method string, data interface{}) {
-		kodiLogger.Println("OnPause")
+		kodiLogger.Println("OnPause", data)
 		eventChan <- STATE_PAUSED
 	})
 	kodi.client.Handle("Player.OnPlay", func(method string, data interface{}) {
-		kodiLogger.Println("OnPlay")
+		kodiLogger.Println("OnPlay", data)
 		eventChan <- STATE_PLAYING
 	})
 	kodi.client.Handle("Player.OnStop", func(method string, data interface{}) {
-		kodiLogger.Println("OnStop")
-		eventChan <- STATE_STOPPED
+		kodiLogger.Println("OnStop", data)
+		params := data.(map[string]interface{})
+		endState := params["end"].(bool)
+		if endState {
+			// current video has finished - play next one
+			eventChan <- STATE_STOPPED
+		} else {
+			// user has pushed stop button - quit
+			kodi.quit()
+			close(eventChan)
+		}
 	})
 
 	kodi.running = true
+
+	// stop current video and open YT addon
+	kodi.stop()
+	kodi.openAddon()
 	kodiLogger.Println("initialized")
 
 	return eventChan
@@ -71,6 +84,11 @@ func (kodi *Kodi) quit() {
 	if !kodi.running {
 		panic("quit called twice")
 	}
+	err := kodi.client.Close()
+	if err != nil {
+		panic(err)
+	}
+	kodi.client = nil
 	kodi.running = false
 	kodi.runningMutex.Unlock()
 }
@@ -85,6 +103,27 @@ func (kodi *Kodi) sendCommand(command string, params map[string]interface{}) (in
 	}
 	kodiLogger.Println(resp)
 	return resp, err
+}
+
+func (kodi *Kodi) sendPlayerCommand(command string) (interface{}, error) {
+	playerId := kodi.getPlayerId()
+	if playerId < 0 {
+		return nil, nil
+	}
+	params := map[string]interface{}{
+		"playerid": playerId,
+	}
+	result, err := kodi.sendCommand(command, params)
+	kodiLogger.Println(result)
+	return result, err
+}
+
+func (kodi *Kodi) openAddon() {
+	params := map[string]interface{}{
+		"addonid": "plugin.video.youtube",
+	}
+	resp, _ := kodi.sendCommand("Addons.ExecuteAddon", params)
+	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
@@ -103,7 +142,7 @@ func (kodi *Kodi) getPlayerId() (int) {
 	}
 	resp, err := kodi.sendCommand("Player.GetActivePlayers", params)
 	if err != nil {
-		return 0
+		return -1
 	}
 
 	result := resp.([]interface{})
@@ -119,18 +158,12 @@ func (kodi *Kodi) getPlayerId() (int) {
 }
 
 func (kodi *Kodi) pause() {
-	params := map[string]interface{}{
-		"playerid": kodi.getPlayerId(),
-	}
-	result, _ := kodi.sendCommand("Player.PlayPause", params)
+	result, _ := kodi.sendPlayerCommand("Player.PlayPause")
 	kodiLogger.Println(result)
 }
 
 func (kodi *Kodi) resume() {
-	params := map[string]interface{}{
-		"playerid": kodi.getPlayerId(),
-	}
-	result, _ := kodi.sendCommand("Player.PlayPause", params)
+	result, _ := kodi.sendPlayerCommand("Player.PlayPause")
 	kodiLogger.Println(result)
 }
 
@@ -180,9 +213,6 @@ func (kodi *Kodi) setVolume(volume int) {
 }
 
 func (kodi *Kodi) stop() {
-	params := map[string]interface{}{
-		"playerid": kodi.getPlayerId(),
-	}
-	result, _ := kodi.sendCommand("Player.Stop", params)
+	result, _ := kodi.sendPlayerCommand("Player.Stop")
 	kodiLogger.Println(result)
 }

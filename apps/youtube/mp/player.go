@@ -101,7 +101,7 @@ func (p *MediaPlayer) startPlaying(ps *PlayState, position time.Duration) {
 		//  *  On very slow systems, like the Raspberry Pi, downloading the
 		//     stream URL for the next video doesn't interrupt the currently
 		//     playing video.
-		p.player.stop()
+		p.player.pause()
 	}
 	p.setPlayState(ps, STATE_BUFFERING, position)
 
@@ -138,12 +138,6 @@ func (p *MediaPlayer) nextVideo(ps *PlayState) {
 	if ps.Index+1 < len(ps.Playlist) {
 		// there are more videos, play the next
 		ps.Index++
-		// p.startPlaying sets the playstate immediately to
-		// buffering (using setPlayState), so it's okay to change it
-		// here. And it is needed, otherwise startPlaying will pause
-		// the currently 'playing' track (nothing is playing, so nothing
-		// can be paused).
-		ps.State = STATE_STOPPED
 		p.startPlaying(ps, 0)
 	} else {
 		// signal that the video has stopped playing
@@ -151,6 +145,31 @@ func (p *MediaPlayer) nextVideo(ps *PlayState) {
 		// TODO keep the position at the end, not the beginning
 		p.setPlayState(ps, STATE_STOPPED, 0)
 	}
+}
+
+func (p *MediaPlayer) NextVideo() {
+	p.getPlayState(func(ps *PlayState) {
+		p.nextVideo(ps)
+	})
+}
+
+func (p *MediaPlayer) previousVideo(ps *PlayState) {
+	if ps.Index-1 >= 0 {
+		// there are more videos, play the previous
+		ps.Index--
+		p.startPlaying(ps, 0)
+	} else {
+		// signal that the video has stopped playing
+		// this resets the position but keeps the playlist
+		// TODO keep the position at the end, not the beginning
+		p.setPlayState(ps, STATE_STOPPED, 0)
+	}
+}
+
+func (p *MediaPlayer) PreviousVideo() {
+	p.getPlayState(func(ps *PlayState) {
+		p.previousVideo(ps)
+	})
 }
 
 // setPlayState updates the PlayState and sends events.

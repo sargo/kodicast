@@ -44,6 +44,10 @@ func (kodi *Kodi) initialize() chan State {
 	kodiLogger.Println("connected")
 	kodi.client = client
 
+	// stop current video and open YT addon
+	kodi.stop()
+	kodi.openAddon()
+
 	eventChan := make(chan State)
 	kodi.client.Handle("Player.OnPause", func(method string, data interface{}) {
 		kodiLogger.Println("OnPause", data)
@@ -69,9 +73,6 @@ func (kodi *Kodi) initialize() chan State {
 
 	kodi.running = true
 
-	// stop current video and open YT addon
-	kodi.stop()
-	kodi.openAddon()
 	kodiLogger.Println("initialized")
 
 	return eventChan
@@ -94,7 +95,7 @@ func (kodi *Kodi) quit() {
 }
 
 // sendCommand sends a command to the Kodi player
-func (kodi *Kodi) sendCommand(command string, params map[string]interface{}) (interface{}, error) {
+func (kodi *Kodi) sendCommand(command string, params interface{}) (interface{}, error) {
 	kodiLogger.Println(command)
 	kodiLogger.Println(params)
 	resp, err := kodi.client.Call(command, params)
@@ -110,7 +111,7 @@ func (kodi *Kodi) sendPlayerCommand(command string) (interface{}, error) {
 	if playerId < 0 {
 		return nil, nil
 	}
-	params := map[string]interface{}{
+	params := map[string]int{
 		"playerid": playerId,
 	}
 	result, err := kodi.sendCommand(command, params)
@@ -119,7 +120,7 @@ func (kodi *Kodi) sendPlayerCommand(command string) (interface{}, error) {
 }
 
 func (kodi *Kodi) openAddon() {
-	params := map[string]interface{}{
+	params := map[string]string{
 		"addonid": "plugin.video.youtube",
 	}
 	resp, _ := kodi.sendCommand("Addons.ExecuteAddon", params)
@@ -127,8 +128,8 @@ func (kodi *Kodi) openAddon() {
 }
 
 func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
-	params := map[string]interface{}{
-		"item": map[string]string{
+	params := map[string]map[string]string{
+		"item": {
 			"file": "plugin://plugin.video.youtube/?action=play_video&videoid="+stream,
 		},
 	}
@@ -138,9 +139,7 @@ func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
 }
 
 func (kodi *Kodi) getPlayerId() (int) {
-	params := map[string]interface{}{
-	}
-	resp, err := kodi.sendCommand("Player.GetActivePlayers", params)
+	resp, err := kodi.sendCommand("Player.GetActivePlayers", nil)
 	if err != nil {
 		return -1
 	}
@@ -205,7 +204,7 @@ func (kodi *Kodi) setPosition(position time.Duration) {
 }
 
 func (kodi *Kodi) setVolume(volume int) {
-	params := map[string]interface{}{
+	params := map[string]int{
 		"volume": volume,
 	}
 	result, _ := kodi.sendCommand("Application.SetVolume", params)

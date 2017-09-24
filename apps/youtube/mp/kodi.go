@@ -2,7 +2,6 @@ package mp
 
 import (
 	"os"
-	"errors"
 	"sync"
 	"time"
 
@@ -10,8 +9,6 @@ import (
 	"github.com/pdf/kodirpc"
 	"github.com/Sirupsen/logrus"
 )
-
-var KODI_PROPERTY_UNAVAILABLE = errors.New("kodi: property unavailable")
 
 // Kodi is an implementation of Backend.
 type Kodi struct {
@@ -59,8 +56,14 @@ func (kodi *Kodi) initialize() chan State {
 	})
 	kodi.client.Handle("Player.OnStop", func(method string, data interface{}) {
 		kodiLogger.Println("OnStop", data)
-		params := data.(map[string]interface{})
-		endState := params["end"].(bool)
+		params, ok := data.(map[string]interface{})
+		if !ok {
+			return
+		}
+		endState, ok := params["end"].(bool)
+		if !ok {
+			return
+		}
 		if endState {
 			// current video has finished - play next one
 			eventChan <- STATE_STOPPED
@@ -72,9 +75,7 @@ func (kodi *Kodi) initialize() chan State {
 	})
 
 	kodi.running = true
-
 	kodiLogger.Println("initialized")
-
 	return eventChan
 }
 
@@ -134,8 +135,7 @@ func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
 		},
 	}
 	resp, _ := kodi.sendCommand("Player.Open", params)
-	result := resp.(string)
-	kodiLogger.Println(result)
+	kodiLogger.Println(resp)
 }
 
 func (kodi *Kodi) getPlayerId() (int) {

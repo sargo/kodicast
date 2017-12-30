@@ -1,0 +1,16 @@
+[Unit]
+Description=Kodicast service
+After=mediacenter.service
+
+[Service]
+RemainAfterExit=yes
+ExecStart=/usr/bin/screen -dmS kodicast /home/osmc/kodicast/systemd/kodicast.sh
+ExecStop=/usr/bin/screen -S kodicast -X quit
+#Restart=always
+User=osmc
+Group=osmc
+
+
+[Install]
+WantedBy=multi-user.target
+

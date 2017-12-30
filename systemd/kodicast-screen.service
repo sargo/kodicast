@@ -3,10 +3,10 @@ Description=Kodicast service
 After=mediacenter.service
 
 [Service]
-RemainAfterExit=yes
+Type=forking
 ExecStart=/usr/bin/screen -dmS kodicast /home/osmc/kodicast/systemd/kodicast.sh
 ExecStop=/usr/bin/screen -S kodicast -X quit
-#Restart=always
+Restart=always
 User=osmc
 Group=osmc
 

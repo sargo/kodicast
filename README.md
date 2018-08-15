@@ -36,10 +36,9 @@ Then get the required packages and compile:
     $ go get -u github.com/sargo/kodicast
 
 To run the server, run the executable `bin/kodicast` relative to your Go
-workspace. Any Android phone with YouTube app (or possibly iPhone, but I haven't
-tested) on the same network should recognize the server and it should be
-possible to play the audio of videos on it. The Chrome extension doesn't yet
-work.
+workspace. Any Android phone or iPhone with YouTube app on the same network
+should recognize the server and it should be possible to play videos on Kodi.
+The Chrome extension doesn't yet work.
 
     $ bin/kodicast
 
@@ -48,7 +47,7 @@ work.
 Big part of Kodicast is taken from
 [Plaincast](https://github.com/aykevl/plaincast) released on BSD license by
 [Ayke van Laethem](https://aykevl.nl/about).
-It use also a great librarty [kodirpc](https://github.com/pdf/kodirpc) by
+It uses also a great librarty [kodirpc](https://github.com/pdf/kodirpc) by
 Peter Fern.
 
 I would like to thank the creators of

@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sargo/kodicast/log"
 	"github.com/pdf/kodirpc"
-	"github.com/Sirupsen/logrus"
+	"github.com/sargo/kodicast/log"
+	"github.com/sirupsen/logrus"
 )
 
 // Kodi is an implementation of Backend.
@@ -131,14 +131,14 @@ func (kodi *Kodi) openAddon() {
 func (kodi *Kodi) play(stream string, position time.Duration, volume int) {
 	params := map[string]map[string]string{
 		"item": {
-			"file": "plugin://plugin.video.youtube/?action=play_video&videoid="+stream,
+			"file": "plugin://plugin.video.youtube/?action=play_video&videoid=" + stream,
 		},
 	}
 	resp, _ := kodi.sendCommand("Player.Open", params)
 	kodiLogger.Println(resp)
 }
 
-func (kodi *Kodi) getPlayerId() (int) {
+func (kodi *Kodi) getPlayerId() int {
 	resp, err := kodi.sendCommand("Player.GetActivePlayers", nil)
 	if err != nil {
 		return -1
@@ -166,9 +166,9 @@ func (kodi *Kodi) resume() {
 	kodiLogger.Println(result)
 }
 
-func (kodi *Kodi) getPosition() (time.Duration) {
+func (kodi *Kodi) getPosition() time.Duration {
 	params := map[string]interface{}{
-		"playerid": kodi.getPlayerId(),
+		"playerid":   kodi.getPlayerId(),
 		"properties": [1]string{"time"},
 	}
 	resp, err := kodi.sendCommand("Player.GetProperties", params)
@@ -194,7 +194,7 @@ func (kodi *Kodi) setPosition(position time.Duration) {
 	params := map[string]interface{}{
 		"playerid": kodi.getPlayerId(),
 		"value": map[string]int64{
-			"hours": int64(position.Hours()) % 24,
+			"hours":   int64(position.Hours()) % 24,
 			"minutes": int64(position.Minutes()) % 60,
 			"seconds": int64(position.Seconds()) % 60,
 		},
